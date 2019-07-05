@@ -1,5 +1,6 @@
 import matplotlib.image as img
 import numpy as np
+import math
 
 from types import SimpleNamespace
 from . import glob
@@ -151,3 +152,18 @@ def get_train_set(dataset_path, n_images):
             
     train_blocks = np.asarray(train_blocks).astype(int)
     return train_blocks
+
+
+def get_psnr(original, compressed):
+    h = original.shape[0]
+    w = original.shape[1]
+    
+    mse = 0
+    for r in range(h):
+        for c in range(w):
+            for v in range(3):
+                mse += (original[r, c, v]-compressed[r, c, v])**2
+            
+    mse = mse/float(h*w)
+    arg = 1/mse**(1/2)
+    return 20*math.log10(arg)
