@@ -115,7 +115,6 @@ def get_test_blocks(image,  padding_info):
             start_col_index = c* passo
             block = image[start_row_index:start_row_index+glob.block_size, start_col_index:start_col_index+glob.block_size, :]
             blocks.append(block)
-    print("Metodo test_blocks, test_block.shape " + str(np.asarray(blocks).shape))        
     return blocks
 
 
@@ -157,13 +156,13 @@ def get_train_set(dataset_path, n_images):
 def get_psnr(original, compressed):
     h = original.shape[0]
     w = original.shape[1]
-    
+
     mse = 0
     for r in range(h):
         for c in range(w):
             for v in range(3):
                 mse += (original[r, c, v]-compressed[r, c, v])**2
-            
+
     mse = mse/float(h*w)
     arg = 1/mse**(1/2)
     return 20*math.log10(arg)

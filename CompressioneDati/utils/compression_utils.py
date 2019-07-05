@@ -1,214 +1,15 @@
 import time
 import numpy as np
 import matplotlib.image as img
-import lzma 
-
+from . import custom_lzma 
 from . import image_utils
 from . import glob
 
 
-def compressor(image_path, encoder, decoder, quality):
-    quality=100-quality
-    t0= time.clock()
-    #Carica l'immagine PNG da comprimere, separando valori RGB (normalizzati) ed alpha channel.
-    
-    immagine_rgb, alpha_channel=image_utils.load_image(image_path)
-    print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    width_immagine_originale=len(immagine_rgb[0])
-    height_immagine_originale=len(immagine_rgb)
-
-    
-    img_padded, padding_info = image_utils.pad_test_image(immagine_rgb)
-    print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    #Recupera i blocchi del test set secondo la strategia indicata in get_test_blocks
-    image_blocks =image_utils.get_test_blocks(img_padded, padding_info)
-    print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    if alpha_channel is not None:
-        #Compressione alpha channel attraverso LZMA
-        alpha_channel_to_bytes= np.asarray(alpha_channel).tobytes()
-        alpha_channel_lz = lzma.compress(
-            alpha_channel_to_bytes,
-            format=lzma.FORMAT_RAW,
-            filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-        )
-    else: 
-        alpha_channel_lz=None
-
-    #Compressione dei blocchi attraverso la rete
-    compressed_blocks=compress_image(encoder, image_blocks)
-    compressed_blocks_shape = np.asarray(compressed_blocks).shape
-    print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock() 
-    
-    # Ulteriore compressione dei blocchi attraverso LZMA
-    compressed_blocks_to_bytes= np.asarray(compressed_blocks).tobytes()
-    compressed_blocks_lz = lzma.compress(
-        compressed_blocks_to_bytes,
-        format=lzma.FORMAT_RAW,
-        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-    )
-    print("image_blocks_size " + str(number_of_bytes(image_blocks)) 
-          + " compressed_blocks_comp " + str(len(compressed_blocks_lz)) )  
-  
-
-    
-    #Decomprimo l'immagine per valutare l'errore di decompressione
-    decompressed_image= decompress_image(decoder, compressed_blocks,
-                                         padding_info, width_immagine_originale,
-                                         height_immagine_originale)
-
-    print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    #Rileva e raccoglie gli errori più elevati, ovvero quelli che hanno un maggiore impatto visivo
-    treshold = get_treshold(immagine_rgb, decompressed_image, quality)
-    important_errors =  evaluate_error(immagine_rgb, decompressed_image, treshold)
-    
-    imp_errors_shape=important_errors.shape
-    print(important_errors)
-    print("Fine evaluate error Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-       
-    #  compression using lzma python library
-    important_errors_bytes= important_errors.tobytes()
-    important_errors_lz = lzma.compress(
-        important_errors_bytes,
-        format=lzma.FORMAT_RAW,
-        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-    ) 
-    err_to_send= important_errors_lz
-    print("important_errors_size " + str(number_of_bytes(important_errors)) 
-          + " err_to_send bytes " + str(len(err_to_send)) )  
-
-    '''
-    # important error compression using custom LZ78 functions
-    error_stream=preprocess_important_errors(important_errors)
-    glob.lz_compressor.initialize()
-    glob.lz_decompressor.initialize()    
-    glob.lz_compressor.compress(error_stream)
-    err_to_send=None
-    print("important_errors_size " + str(number_of_bytes(important_errors)))
-    '''
-    
-    
-    
-    print("Fine compressione LZ Elapsed: {}".format(time.clock()-t0))
-    print("FINE COMPRESSORE")
-    
-    
-    decompressor(compressed_blocks_lz, compressed_blocks_shape,
-                 err_to_send, imp_errors_shape,
-                 padding_info, width_immagine_originale,
-                 height_immagine_originale, alpha_channel_lz,
-                 decoder)
-   
-    
-    
-    
-    
-    
-    
-def decompressor(compressed_blocks_lz, compressed_blocks_shape,
-                 err_received, imp_errors_shape,
-                 padding_info, width_immagine_originale,
-                 height_immagine_originale, alpha_channel_lz,
-                 decoder):
-    print("Inizio decompressore ")
-    t0= time.clock()
-    
-    #Alpha channel decompression with LZMA
-    if alpha_channel_lz is not None:
-        alpha_channel_byte= lzma.decompress(
-        alpha_channel_lz,
-        format=lzma.FORMAT_RAW,
-        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-        )
-        alpha_channel_float = np.frombuffer(alpha_channel_byte, dtype=np.float32)
-        alpha_channel= np.reshape(compressed_blocks_float, (height_immagine_originale, width_immagine_originale, 1))   
-    else:
-        alpha_channel=None
-        
-    # Block decompression with LZMA
-   
-    compressed_blocks_byte= lzma.decompress(
-        compressed_blocks_lz,
-        format=lzma.FORMAT_RAW,
-        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-    )
-    
-    compressed_blocks_float = np.frombuffer(compressed_blocks_byte, dtype=np.float32)
-    compressed_blocks= np.reshape(compressed_blocks_float, compressed_blocks_shape)
-    
-    print("End block decompression with lzma {}".format(time.clock()-t0))
-    t0= time.clock()
-    #Decomprimo l'immagine
-    
-    decompressed_image= decompress_image(decoder, compressed_blocks, padding_info, 
-                                         width_immagine_originale, height_immagine_originale)
-    
-    
-    
-    decompressed_image_only_network=decompressed_image
-    #Aggiungo l'alpha channel all'immagine ottenuta dalla decompressione effettuata dalla rete...
-    if(alpha_channel is not None):
-        decompressed_image_only_network = np.concatenate((decompressed_image_only_network, alpha_channel), axis=2)
-
-    
-    #... e salvo l'immagine per valutare graficamente le performance di decompressione della rete
-    img.imsave("predicted/output_network.png", decompressed_image_only_network)
-    print("Fine decompressione rete: {}".format(time.clock()-t0))
-    t0= time.clock()
-        
-    #Successivamente effettuo la error correction, correggendo gli errori più evidenti graficamente . Ciò 
-    # porterà ad un'immagine molto più simile a quella originale. Nei piccoli dettagli composti da pochi pixel (zoommando sia 
-    # decompressed_image_only_network che decompressed_image_migliorata è possibile notare una notevole differenza).
-    
-    important_errors_comp= err_received
-    # important error compression using lzma python library
-    imp_errs_decomp_byte= lzma.decompress(
-        important_errors_comp,
-        format=lzma.FORMAT_RAW,
-        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-    )
-    
-    imp_errs_decomp_float = np.frombuffer(imp_errs_decomp_byte, dtype=np.float32)
-    important_errors= np.reshape(imp_errs_decomp_float, imp_errors_shape)
-    
-    '''
-    # important error decompression using custom LZ78 functions
-    imp_errs_decomp_str=glob.lz_decompressor.get_reconstructed_word()
-    
-    #postprocess
-    '''
-    
-    
-    print(important_errors)
-    print("End decompressed important errors {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    
-    decompressed_image_migliorata = migliora_immagine(decompressed_image, important_errors)
-    print("Fine miglioramento immagine: {}".format(time.clock()-t0))
-    t0= time.clock()
-   
-    if(alpha_channel is not None):
-        decompressed_image_migliorata = np.concatenate((decompressed_image_migliorata, alpha_channel), axis=2)
-
-    
-    img.imsave("predicted/decompression.png", decompressed_image_migliorata)
-    
-    print("Fine decompressore Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
-    
-    
+                                  
+                                  
+# Compress image blocks through a compression network                                  
 def compress_image(compression_net, image_blocks):
-    #I blocchi 128x128x3 sono compressi in 32x32x16
     compressed_blocks = []
     for i in range (0, len(image_blocks)):
         compressed_block= compression_net.predict(np.asarray([image_blocks[i]]))
@@ -217,14 +18,14 @@ def compress_image(compression_net, image_blocks):
     return compressed_blocks 
 
 
-    
-#USATO DAL COMPRESSORE PER STIMARE L'ERRORE DI DECOMPRESSIONE, E DAL DECOMPRESSORE per decomprimere
+'''
+Decompress image blocks through a decompression network. 
+Blocks are then reshaped to form the decompressed image. Lastly, image padding is deleted.
+'''  
 def decompress_image(decompression_net, compressed_blocks,
                      padding_info, width_immagine_originale,
-                     height_immagine_originale):
+                     height_immagine_originale, p=True):
     
-    #Le prime/ultime 10 (ovvero size_cornice) righe/colonne non saranno incluse nell'array (sono certo che siano solo valori di padding). 
-    # Le esludo a priori. Questo è il motivo del  -size_cornice * 2 che si ha nelle dimensioni.
     width_decompressed_image = (padding_info.size_pad_cols_left +
                                 width_immagine_originale +
                                 padding_info.size_pad_cols_right -
@@ -235,106 +36,87 @@ def decompress_image(decompression_net, compressed_blocks,
                                  padding_info.size_pad_cols_bottom -
                                  glob.frame_size * 2)
     
-    #Inizializzo la matrice che conterrà l'output di tutte le decompressioni
+    #Initialize empty decompressed_image    
     decompressed_image=np.zeros((height_decompressed_image,width_decompressed_image,3), dtype=np.float32)
- 
     passo= glob.block_size - (glob.frame_size * 2)
+                                  
     for row in range (0, padding_info.number_of_vertical_blocks):
         for col in range (0, padding_info.number_of_horizontal_blocks):
-           
+            
             to_predict = np.asarray(compressed_blocks[row * padding_info.number_of_horizontal_blocks + col])
-            decompressed_block = decompression_net.predict(to_predict)
-                                            
+            decompressed_block = decompression_net.predict(to_predict)                                      
             decompressed_block=decompressed_block[0]
             
-            #Organizzo gli output della predizione del singolo blocco salvando solo il quadrato 108x108x3 
             last_index = glob.block_size-glob.frame_size
             decompressed_block=decompressed_block[glob.frame_size:last_index, glob.frame_size:last_index,:]
-        
-            #Posiziono opportunamente all'interno dell'immagine il blocco 108x108x3 ottenuto dall'istruzione precedente
-            # avanzo a scatti di passo (secondo la strategia spiegata in pad_test_image)
+            #Decompressed block is positioned inside decompressed image properly
             start_row_index= row * passo
             start_col_index= col * passo
             final_row_index = start_row_index+passo
             final_col_index = start_col_index+passo
             decompressed_image[start_row_index:final_row_index, start_col_index:final_col_index, :] = decompressed_block
             
-    #Tolgo i due pad, tenendo presente che le 10 righe/colonne iniziali/finali dell'immagine paddata sono state già escluse 
-    # da  decompressed_block= decompression_net.predict(np.asarray(compressed_blocks[row * number_of_horizontal_blocks + col]))
-    # e dunque non vanno escluse nuovamente. (Questa è il motivo di tutte le presenze di size_cornice nella istruzione seguente)
+    #Decompressed image is unpadded
     h_decompressed_img = len(decompressed_image)
     w_decompressed_img = len(decompressed_image[0])
     first_top_idx = padding_info.size_pad_cols_top - glob.frame_size
     first_bottom_idx = h_decompressed_img - padding_info.size_pad_cols_bottom + glob.frame_size
     first_left_idx = padding_info.size_pad_cols_left - glob.frame_size
     first_right_idx = w_decompressed_img - padding_info.size_pad_cols_right + glob.frame_size
-    
-    
+                                  
     decompressed_image=decompressed_image[first_top_idx:first_bottom_idx, first_left_idx:first_right_idx, :]
+    
     return decompressed_image
 
+                                  
+                                  
 
-# Valuta gli errori di compressione in ogni canale di ogni pixel. Crea tre array, uno per gli errori più rilevanti nel canale rosso,
-# uno per gli errori più rilevanti del verde, uno per gli errori più rilevanti del blu.
-def evaluate_error(immagine, decompressed_image, threshold):
+#Compute relevant errors
+def compute_relevant_errors(immagine, decompressed_image, threshold, p=True):
     
     height = len(immagine)
     width = len(immagine[0])
     
-    
-    #First channel for R error value. Second channel for G error value. Third channel fo B error value. 
+    #First channel for R error value. Second channel for G error value. Third channel for B error value. 
     #Fourth channen for pixel's row index . Fifth channel for pixel's col index.
     error_matrix = np.zeros((height, width, 5), dtype=np.float32)
     
-    #Calcolo l'errore per ogni pixel dell'immagine
+    #Error computed
     error_matrix[:,:,0:3] = decompressed_image - immagine
 
-    
-    #Aggiungo all'error_matrix informazioni su riga e colonna.
-    
-    #Inizializzo il quarto channel, che conterrà, per ogni pixel, l'indice della riga al quale il pixel appartiene
+    #Decore matrix with row and col information
+                                  
+    #Row decoration
     channel_for_row_information= np.zeros((len(immagine), len(immagine[0])), dtype=int)
     t0= time.clock()
-    # Per l'iesima riga devo craere un array di size 
+
     for i in range(height):    
         i_row= np.full((width), i)
         channel_for_row_information[i, :] = i_row
-    print("T elapsed = {}".format(time.clock() - t0))
-    t0 = time.clock()
-    
-    #Inizializzo il quarto channel, che conterrà, per ogni pixel, l'indice della colonna al quale appartiene
+   
+    #Col decoration
     channel_for_col_information= np.zeros((len(immagine), len(immagine[0])), dtype=int)
     for j in range(width):    
         j_col= np.full(height, j)
         channel_for_col_information[:, j] = j_col
-    print("T elapsed = {}".format(time.clock() - t0))
  
-    
-    #Inserisco i due canali costruiti
     error_matrix[:,:,3]= channel_for_row_information
     error_matrix[:,:,4]= channel_for_col_information
     
-    #error_matrix ha ora shape n_rows, n_cols, n_channels. I canali sono ora 5: error_red, error_green, error_blue, row_index, col_index.                            
+                         
     important_errors= []
-    
     error_matrix=error_matrix.reshape(error_matrix.shape[0] * error_matrix.shape[1],5)
    
-    
     r1= error_matrix [error_matrix[:,0] >= threshold]
-    error_matrix=error_matrix [error_matrix[:,0] < threshold]
-    
+    error_matrix=error_matrix [error_matrix[:,0] <= threshold]
     r2 = error_matrix [error_matrix[:,0] <= -threshold]
-    error_matrix=error_matrix [error_matrix[:,0] > -threshold]
-    
+    error_matrix=error_matrix [error_matrix[:,0] >= -threshold]
     g1= error_matrix [error_matrix[:,1] >= threshold]
-    error_matrix=error_matrix [error_matrix[:,1] < threshold]
-    
+    error_matrix=error_matrix [error_matrix[:,1] <= threshold]
     g2 = error_matrix [error_matrix[:,1] <= -threshold]
-    error_matrix=error_matrix [error_matrix[:,1] > -threshold]
-    
+    error_matrix=error_matrix [error_matrix[:,1] >= -threshold]
     b1= error_matrix [error_matrix[:,2] >= threshold]
-    error_matrix=error_matrix [error_matrix[:,2] < threshold]
-    
+    error_matrix=error_matrix [error_matrix[:,2] <= threshold]
     b2 = error_matrix [error_matrix[:,2] <= -threshold]
 
     important_errors= np.concatenate((r1, r2), axis=0)
@@ -342,53 +124,30 @@ def evaluate_error(immagine, decompressed_image, threshold):
     important_errors= np.concatenate((important_errors, g2), axis=0)
     important_errors= np.concatenate((important_errors, b1), axis=0)
     important_errors= np.concatenate((important_errors, b2), axis=0)    
-                        
     
-    
-    
-    print("Fine calcolo errore T elapsed = {}".format(time.clock() - t0))
-    t0 = time.clock()
-    
-    
-    
-    print("Shape important errors " + str(np.asarray(important_errors).shape))
-    return np.asarray(important_errors)
-    
-    
-#Usato dal decompressore per la error_correction
+    return important_errors
+ 
+                                  
+#Error correction
 def migliora_immagine(decompressed_image, important_errors):
     for i in range (0, len(important_errors)):
         row_index= int(important_errors[i][3])
-        col_index= int(important_errors[i][4])
-        
+        col_index= int(important_errors[i][4])   
         decompressed_image[row_index, col_index, :] -= important_errors[i,0:3]
     
     return decompressed_image
 
 
         
-def preprocess_important_errors(important_errors):
-    error_stream = ""
-
-    for idx, elem in enumerate(important_errors):
-        
-        current_string =('{:.2f}'.format(elem[0]) +"*" +
-                        '{:.2f}'.format(elem[0]) +"*"+
-                        '{:.2f}'.format(elem[0]) +"*"+
-                        str(int(elem[3]))+"*"+str(int(elem[4])))
-        
-        error_stream += ('#'+current_string)
-       
-    return error_stream[1:]
-
     
-def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
+def evaluate_compression_ratio(image_path, encoder, decoder, quality, p=True):
     quality=100-quality
     t0= time.clock()
     #Carica l'immagine PNG da comprimere, separando valori RGB (normalizzati) ed alpha channel.
     
     immagine_rgb, alpha_channel=image_utils.load_image(image_path)
-    print("Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
     width_immagine_originale=len(immagine_rgb[0])
@@ -396,12 +155,14 @@ def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
 
     
     img_padded, padding_info = image_utils.pad_test_image(immagine_rgb)
-    print("Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
     #Recupera i blocchi del test set secondo la strategia indicata in get_test_blocks
     image_blocks =image_utils.get_test_blocks(img_padded, padding_info)
-    print("Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
     if alpha_channel is not None:
@@ -418,7 +179,8 @@ def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
     #Compressione dei blocchi attraverso la rete
     compressed_blocks=compress_image(encoder, image_blocks)
     compressed_blocks_shape = np.asarray(compressed_blocks).shape
-    print("Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock() 
     
     # Ulteriore compressione dei blocchi attraverso LZMA
@@ -428,7 +190,8 @@ def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
         format=lzma.FORMAT_RAW,
         filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
     )
-    print("image_blocks_size " + str(number_of_bytes(image_blocks)) 
+    if p:
+        print("image_blocks_size " + str(number_of_bytes(image_blocks)) 
           + " compressed_blocks_comp " + str(len(compressed_blocks_lz)) )  
   
 
@@ -436,18 +199,20 @@ def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
     #Decomprimo l'immagine per valutare l'errore di decompressione
     decompressed_image= decompress_image(decoder, compressed_blocks,
                                          padding_info, width_immagine_originale,
-                                         height_immagine_originale)
+                                         height_immagine_originale, p)
 
-    print("Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
     #Rileva e raccoglie gli errori più elevati, ovvero quelli che hanno un maggiore impatto visivo
     treshold = get_treshold(immagine_rgb, decompressed_image, quality)
-    important_errors =  evaluate_error(immagine_rgb, decompressed_image, treshold)
+    important_errors = evaluate_error(immagine_rgb, decompressed_image, treshold, p)
     
     imp_errors_shape=important_errors.shape
-    print(important_errors)
-    print("Fine evaluate error Elapsed: {}".format(time.clock()-t0))
+    if p:
+        print(important_errors)
+        print("Fine evaluate error Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
        
     #  compression using lzma python library
@@ -464,53 +229,52 @@ def evaluate_compression_ratio(image_path, encoder, decoder,   quality):
     
 
 
-    print("shape compressed_blocks " + str(np.asarray(compressed_blocks).shape))
-    print(type(compressed_blocks[0][0][0][0][0]))
+    if p:
+        print("shape compressed_blocks " + str(np.asarray(compressed_blocks).shape))
+        print(type(compressed_blocks[0][0][0][0][0]))
     size_compressed_blocks_lz= len(compressed_blocks_lz)
-    print("size_compressed_blocks_lz " + str(size_compressed_blocks_lz) +
+    if p:
+        print("size_compressed_blocks_lz " + str(size_compressed_blocks_lz) +
           " shape compressed_blocks " + str(np.asarray(compressed_blocks).shape) )
-    print()
+        print()
     
     size_important_errors_lz= len(important_errors_lz)
-    print("size_important_errors " + str(size_important_errors_lz))
-    print()
+    if p:
+        print("size_important_errors " + str(size_important_errors_lz))
+        print()
     
     if(alpha_channel is not None):
         size_alpha_channel= number_of_bytes(alpha_channel)
-        print("size_alpha_channel " + str(size_alpha_channel) + 
+        if p:
+            print("size_alpha_channel " + str(size_alpha_channel) + 
               " shape alpha_channel " + str(np.asarray(alpha_channel).shape) )
-        print(type(alpha_channel[0][0][0]))
-        print()
+            print(type(alpha_channel[0][0][0]))
+            print()
     else: 
         size_alpha_channel=0
         
         
     if (alpha_channel_lz is not None):
         size_alpha_channel_lz= len(size_alpha_channel_lz)
-        print("size_alpha_channel_lz " + str(size_alpha_channel_lz))
-        print()
+        if p:
+            print("size_alpha_channel_lz " + str(size_alpha_channel_lz))
+            print()
     else :
         size_alpha_channel_lz=0
     
     
     size_immagine_rgb= number_of_bytes(immagine_rgb)
-    print("size_immagine_rgb " + str(size_immagine_rgb) + 
+    if p:
+        print("size_immagine_rgb " + str(size_immagine_rgb) + 
           " shape immagine_rgb " + str(np.asarray(immagine_rgb).shape) )
-    print(type(image_blocks[0][0][0][0]))
-    print()
+        print(type(image_blocks[0][0][0][0]))
+        print()
     
     
     
     compressed_size=size_compressed_blocks_lz  + size_important_errors_lz + size_alpha_channel_lz
     original_size=size_alpha_channel + size_immagine_rgb
     return original_size/compressed_size
-
-
-
-
-
-
-
 
 
 
