@@ -529,3 +529,21 @@ def validation_set_pred_error(net):
     print("Standard deviation complessiva dell'errore " + str(std))
     print(error_vector.shape)
     return error_vector
+
+
+def get_treshold(im1, im2, quality, n_samples=10000)
+    h = im1.shape[0]
+    w = im1.shape[1]
+
+    random_indices = list(zip(np.random.choice(h, n_samples), np.random.choice(w, n_samples)))
+
+    errors = []
+    for indices in random_indices:
+        px_or = im1[indices[0], indices[1]]
+        px_ou = im2[indices[0], indices[1]]
+        diff = px_or - px_ou
+        errors.extend(diff.tolist())
+    errors = [abs(x) for x in errors]
+    errors.sort()
+    treshold = np.percentile(errors, quality)
+    return treshold
