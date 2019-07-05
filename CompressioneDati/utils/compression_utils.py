@@ -29,9 +29,21 @@ def compressor(image_path, encoder, decoder):
     t0= time.clock()
     #Compressione dei blocchi
     compressed_blocks=compress_image(encoder, image_blocks)
+    compressed_blocks_shape = np.asarray(compressed_blocks).shape
     print("Elapsed: {}".format(time.clock()-t0))
-    t0= time.clock()
+    t0= time.clock() 
     
+    # Block compression with LZMA
+    compressed_blocks_to_bytes= np.asarray(compressed_blocks).tobytes()
+    compressed_blocks_lz = lzma.compress(
+        compressed_blocks_to_bytes,
+        format=lzma.FORMAT_RAW,
+        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
+    )
+    print("image_blocks_size " + str(number_of_bytes(image_blocks)) 
+          + " compressed_blocks_comp " + str(len(compressed_blocks_lz)) )  
+  
+
     
     #Decomprimo l'immagine per valutare l'errore di decompressione
     decompressed_image= decompress_image(decoder, compressed_blocks,
@@ -50,17 +62,12 @@ def compressor(image_path, encoder, decoder):
        
     #  compression using lzma python library
     important_errors_bytes= important_errors.tobytes()
-
     important_errors_comp = lzma.compress(
         important_errors_bytes,
         format=lzma.FORMAT_RAW,
         filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
-    )
-    
-    print("compressed important_errors size " + str(len(important_errors_comp))) 
-    
+    ) 
     err_to_send= important_errors_comp
-    
     print("important_errors_size " + str(number_of_bytes(important_errors)) 
           + " err_to_send bytes " + str(len(err_to_send)) )  
 
@@ -71,28 +78,47 @@ def compressor(image_path, encoder, decoder):
     glob.lz_decompressor.initialize()    
     glob.lz_compressor.compress(error_stream)
     err_to_send=None
+    print("important_errors_size " + str(number_of_bytes(important_errors)))
     '''
     
-    print("important_errors_size " + str(number_of_bytes(important_errors)))  
+    
     
     print("Fine compressione LZ Elapsed: {}".format(time.clock()-t0))
     print("FINE COMPRESSORE")
     
     
-    decompressor(compressed_blocks, err_to_send, imp_errors_shape,
+    decompressor(compressed_blocks_lz, compressed_blocks_shape,
+                 err_to_send, imp_errors_shape,
                  padding_info, width_immagine_originale,
                  height_immagine_originale, alpha_channel,
                  decoder)
    
     
     
-def decompressor(compressed_blocks, err_received, imp_errors_shape,
+def decompressor(compressed_blocks_lz, compressed_blocks_shape,
+                 err_received, imp_errors_shape,
                  padding_info, width_immagine_originale,
                  height_immagine_originale, alpha_channel,
                  decoder):
     print("Inizio decompressore ")
     t0= time.clock()
     
+    
+    
+    # Block decompression with LZMA
+   
+    # important error compression using lzma python library
+    compressed_blocks_byte= lzma.decompress(
+        compressed_blocks_lz,
+        format=lzma.FORMAT_RAW,
+        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}]
+    )
+    
+    compressed_blocks_float = np.frombuffer(compressed_blocks_byte, dtype=np.float32)
+    compressed_blocks= np.reshape(compressed_blocks_float, compressed_blocks_shape)
+    
+    print("End block decompression with lzma {}".format(time.clock()-t0))
+    t0= time.clock()
     #Decomprimo l'immagine
     
     decompressed_image= decompress_image(decoder, compressed_blocks, padding_info, 
@@ -135,7 +161,7 @@ def decompressor(compressed_blocks, err_received, imp_errors_shape,
     
     
     print(important_errors)
-    print("End decompressed important errors ")
+    print("End decompressed important errors {}".format(time.clock()-t0))
     t0= time.clock()
     
     
