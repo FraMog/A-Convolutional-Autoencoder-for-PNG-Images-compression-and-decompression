@@ -7,7 +7,7 @@ from . import image_utils
 from . import glob
 
 
-def compressor(image_path, encoder, decoder):
+def compressor(image_path, encoder, decoder, quality):
     t0= time.clock()
     #Carica l'immagine PNG da comprimere, separando valori RGB (normalizzati) ed alpha channel.
     
@@ -49,12 +49,15 @@ def compressor(image_path, encoder, decoder):
     decompressed_image= decompress_image(decoder, compressed_blocks,
                                          padding_info, width_immagine_originale,
                                          height_immagine_originale)
+    
+    
 
     print("Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
     #Rileva e raccoglie gli errori più elevati, ovvero quelli che hanno un maggiore impatto visivo
-    important_errors =  evaluate_error(immagine_rgb, decompressed_image)
+    treshold = get_treshold(immagine_rgb, decompressed_image, quality)
+    important_errors =  evaluate_error(immagine_rgb, decompressed_image, treshold)
     imp_errors_shape=important_errors.shape
     print(important_errors)
     print("Fine evaluate error Elapsed: {}".format(time.clock()-t0))
@@ -248,7 +251,7 @@ def decompress_image(decompression_net, compressed_blocks,
 
 # Valuta gli errori di compressione in ogni canale di ogni pixel. Crea tre array, uno per gli errori più rilevanti nel canale rosso,
 # uno per gli errori più rilevanti del verde, uno per gli errori più rilevanti del blu.
-def evaluate_error(immagine, decompressed_image, threshold=0.2):
+def evaluate_error(immagine, decompressed_image, threshold):
     
     height = len(immagine)
     width = len(immagine[0])
@@ -313,10 +316,7 @@ def evaluate_error(immagine, decompressed_image, threshold=0.2):
     important_errors= np.concatenate((important_errors, g1), axis=0)
     important_errors= np.concatenate((important_errors, g2), axis=0)
     important_errors= np.concatenate((important_errors, b1), axis=0)
-    important_errors= np.concatenate((important_errors, b2), axis=0)    
-                        
-    
-    
+    important_errors= np.concatenate((important_errors, b2), axis=0)     
     
     print("Fine calcolo errore T elapsed = {}".format(time.clock() - t0))
     t0 = time.clock()
