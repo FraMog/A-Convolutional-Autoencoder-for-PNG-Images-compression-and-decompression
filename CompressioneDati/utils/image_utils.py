@@ -5,7 +5,7 @@ import math
 from types import SimpleNamespace
 from . import glob
 
-def pad_image(image):
+def pad_train_image(image):
     n_rows = image.shape[0]
     n_cols = image.shape[1]
     n_chan = image.shape[2]
@@ -28,15 +28,14 @@ def pad_image(image):
 
 
 def pad_test_image(image):
-    
     padding_info = SimpleNamespace()
     
-    padding_info.size_pad_cols_left=glob.frame_size
-    padding_info.size_pad_cols_right=glob.frame_size
-    padding_info.size_pad_cols_top=glob.frame_size
-    padding_info.size_pad_cols_bottom=glob.frame_size
+    padding_info.size_pad_left=glob.frame_size
+    padding_info.size_pad_right=glob.frame_size
+    padding_info.size_pad_top=glob.frame_size
+    padding_info.size_pad_bottom=glob.frame_size
     
-    #Aggiungo size_cornice colonne a sinistra e destra e size_cornice righe in alto e in basso
+    #Add frame to entire image
     n_rows = image.shape[0]
     n_cols = image.shape[1]
     n_chan = image.shape[2]
@@ -57,33 +56,60 @@ def pad_test_image(image):
     n_cols = image.shape[1]
     n_chan = image.shape[2]
     
-    passo= glob.block_size - (glob.frame_size * 2)
-
-    if n_rows % passo != 0:
+    step= glob.block_size - (glob.frame_size * 2)
+    print ("step " + str(step))
+    print("shape dopo pad cornice " + str(image.shape[0]) + " " + str(image.shape[1]))
+    
+    v_blks = math.ceil(n_rows/step)
+    image = compute_last_v_block_padding(image, n_rows, n_cols, n_chan, step, padding_info, v_blks)
      
-        diff = glob.block_size - (n_rows % passo)
-        padding_info.size_pad_cols_bottom= padding_info.size_pad_cols_bottom + diff
-        pad = np.zeros((diff, n_cols, n_chan), dtype=np.float32)
-        image = np.concatenate((image, pad), axis=0)
-        
-    n_rows = image.shape[0]
+    n_rows = image.shape[0]  
     
-    if n_cols % passo != 0:
-        diff = glob.block_size - (n_cols % passo)
-        padding_info.size_pad_cols_right = padding_info.size_pad_cols_right + diff
-        pad = np.zeros((n_rows, diff, n_chan), dtype=np.float32)
-        image = np.concatenate((image, pad), axis=1)
-     
-    #Numero dei blocchi block_size x blocks_size x blocks_size che devo considerare sia orizzontalmente che verticalmente, 
-    #tenendo conto che sui due assi mi muovo con step di  block_size/2 pixel alla volta.
+    h_blks = math.ceil(n_cols/step)
+    image = compute_last_h_block_padding(image, n_rows, n_cols, n_chan, step, padding_info, h_blks)
     
-    padding_info.number_of_horizontal_blocks= int(image.shape[1]/passo)
-    padding_info.number_of_vertical_blocks= int(image.shape[0]/passo) 
-    
+    padding_info.number_of_horizontal_blocks = h_blks
+    padding_info.number_of_vertical_blocks = v_blks
+    print(str(image.shape[0]) + " " + str(image.shape[1]))
+    print(str(padding_info.number_of_horizontal_blocks))
+    print(str(padding_info.number_of_vertical_blocks))
     return image, padding_info
 
 
-def get_blocks(image):
+def compute_last_v_block_padding(image, n_rows, n_cols, n_chan, step, padding_info, v_blks):  
+    last_blk_start_idx = (v_blks-1) * step 
+    height_last_v_block = n_rows - last_blk_start_idx
+    if height_last_v_block < glob.block_size:
+        diff = glob.block_size - height_last_v_block
+        padding_info.size_pad_bottom= padding_info.size_pad_bottom + diff
+        pad = np.zeros((diff, n_cols, n_chan), dtype=np.float32)
+        image = np.concatenate((image, pad), axis=0)
+    return image
+
+
+def compute_last_h_block_padding(image, n_rows, n_cols, n_chan, step, padding_info, h_blks):
+    last_blk_start_idx = (h_blks-1) * step 
+    width_last_h_block = n_cols - last_blk_start_idx
+    if width_last_h_block < glob.block_size:    
+        diff = glob.block_size - width_last_h_block
+        padding_info.size_pad_right = padding_info.size_pad_right + diff
+        pad = np.zeros((n_rows, diff, n_chan), dtype=np.float32)
+        image = np.concatenate((image, pad), axis=1)
+    return image
+
+
+def unpad_image(decompressed_image, padding_info):
+    h_decompressed_img = len(decompressed_image)
+    w_decompressed_img = len(decompressed_image[0])
+    first_top_idx = padding_info.size_pad_top - glob.frame_size
+    first_bottom_idx = h_decompressed_img - padding_info.size_pad_bottom + glob.frame_size
+    first_left_idx = padding_info.size_pad_left - glob.frame_size
+    first_right_idx = w_decompressed_img - padding_info.size_pad_right + glob.frame_size
+                                  
+    return decompressed_image[first_top_idx:first_bottom_idx, first_left_idx:first_right_idx, :]                             
+
+
+def get_train_blocks(image):
     
     image = pad_image(image)
     
@@ -123,17 +149,16 @@ def load_image(image):
     a=img.imread(image)
 
     alpha_channel=None
-    #Se i canali sono almeno 4, ovvero, se oltre ai valori RGB ne è presente un altro (solitamente è l'alpha channel).
     if (a.shape[2]==4):
         alpha_channel= np.expand_dims(a[:,:,3], axis=2)
-    #Separo RGB ed alpha channel
+        
     return a[:,:,0:3], alpha_channel
 
-def get_train_set(dataset_path, n_images):
 
+def get_train_set(dataset_path, n_images):
     train_blocks = []
 
-    
+
     for idx, f in enumerate(os.listdir("dataset")):
         
         if idx > n_images-1:

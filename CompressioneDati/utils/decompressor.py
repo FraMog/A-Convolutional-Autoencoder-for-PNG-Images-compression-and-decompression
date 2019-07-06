@@ -23,7 +23,7 @@ def decompress(code, decoder, p=True):
         alpha_channel = custom_lzma.decompression(alpha_channel_lz, alpha_channel_shape)
         
         if p:
-            print("Alpha channel lz decompressed. Elapsed: {}".format(time.clock()-t0))
+            print("Alpha channel LZMA decompressed. Elapsed: {}".format(time.clock()-t0))
             t0= time.clock()
     else:
         alpha_channel=None
@@ -33,7 +33,7 @@ def decompress(code, decoder, p=True):
     # Blocks decompression through LZMA
     compressed_blocks= custom_lzma.decompression(compressed_blocks_lz, compressed_blocks_shape)
     if p:
-        print("Image blocks LZMA decompressed. Elapsed: {}".format(time.clock()-t0))
+        print("Blocks LZMA decompressed. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()
                                   
     # Lossy image blocks decompression through decoder network.                               
@@ -41,14 +41,14 @@ def decompress(code, decoder, p=True):
                                          width_immagine_originale, height_immagine_originale)
     net_decompressed_image_copy= net_decompressed_image.copy()
     if p:
-        print("End network blocks decompression. Elapsed: {}".format(time.clock()-t0))
+        print("Blocks decompressed through decoder network. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()
 
     if(alpha_channel is not None):
         net_decompressed_image_copy = np.concatenate((net_decompressed_image_copy, alpha_channel), axis=2)
     img.imsave("predicted/network_decompression.png", net_decompressed_image_copy)
     if p:
-        print("Network decompressed image saved. Elapsed: {}".format(time.clock()-t0))
+        print("Network decompressed image saved in predicted/network_decompression.png. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()
     
                                   
@@ -56,10 +56,10 @@ def decompress(code, decoder, p=True):
     important_errors_lz= err_received
     important_errors= custom_lzma.decompression(important_errors_lz, imp_errors_shape)
     if p:
-        print("important errors decompressed through LZMA. Elapsed: {}".format(time.clock()-t0))
+        print("Relevant errors decompressed through LZMA. Elapsed: {}".format(time.clock()-t0))
     t0= time.clock()
     
-    err_corrected_image = compression_utils.migliora_immagine(net_decompressed_image, important_errors)
+    err_corrected_image = compression_utils.correct_errors(net_decompressed_image, important_errors)
     if p:
         print("Image error corrected. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()  
@@ -67,6 +67,6 @@ def decompress(code, decoder, p=True):
         alpha_err_corrected_image = np.concatenate((decompressed_image_migliorata, alpha_channel), axis=2)
     img.imsave("predicted/decompression_error_corrected.png", err_corrected_image)   
     if p:
-        print("Error corrected image save. Elapsed: {}".format(time.clock()-t0))
+        print("Error-corrected image saved in predicted/decompression_error_corrected.png. Elapsed: {}".format(time.clock()-t0))
                                   
     print("Decompressor ENDS. Total decompressor computation time is {}".format(time.clock()-t1))

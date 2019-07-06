@@ -55,11 +55,10 @@ def get_decoder():
 
 
 def fit_network(net, block_size, n_epochs=40):
-    train_set_size=800
-    casual_array=np.arange(train_set_size).tolist()
-    
-    
+    train_set_size=800 
+     
     for i in range (0, n_epochs):
+        casual_array=np.arange(train_set_size).tolist()
         train_set=[]
         for j in range (0,40):
             index=randint(0, len(casual_array)-1)

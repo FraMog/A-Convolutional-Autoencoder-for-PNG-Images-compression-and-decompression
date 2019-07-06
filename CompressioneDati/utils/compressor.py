@@ -31,14 +31,14 @@ def compress(image_path, encoder, decoder, quality, p=True):
    
     image_blocks =image_utils.get_test_blocks(img_padded, padding_info)
     if p:
-        print("Image blocks computed. Elapsed: {}".format(time.clock()-t0))
+        print("Image separated into blocks. Elapsed: {}".format(time.clock()-t0))
         t0 = time.clock()
     
     
     if alpha_channel is not None:
         alpha_channel_lz= custom_lzma.compression(alpha_channel)
         if p:
-            print("Alpha channel lz-compressed. Elapsed: {}".format(time.clock()-t0))
+            print("Alpha channel LZMA-compressed. Elapsed: {}".format(time.clock()-t0))
             t0 = time.clock()
     else: 
         alpha_channel_lz=None
@@ -78,14 +78,14 @@ def compress(image_path, encoder, decoder, quality, p=True):
     important_errors =  compression_utils.compute_relevant_errors(immagine_rgb, net_decompressed_image, treshold, p)  
     imp_errors_shape=important_errors.shape
     if p:
-        print("Important errors evaluation ends. Elapsed: {}".format(time.clock()-t0))
+        print("Relevant errors computed. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()   
     # important_errors compressed through LZMA
     important_errors_bytes= important_errors.tobytes()
     important_errors_lz = custom_lzma.compression(important_errors) 
     err_to_send= important_errors_lz 
     if p:
-        print("important_errors lz compressed. Elapsed: {}".format(time.clock()-t0))
+        print("Relevant errors LZMA compressed. Elapsed: {}".format(time.clock()-t0))
         print("Compressor ENDS. Total compressor computation time is {}".format(time.clock()-t1) + "\n")
     
     
