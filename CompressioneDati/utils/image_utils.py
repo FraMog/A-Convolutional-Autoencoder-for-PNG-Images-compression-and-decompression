@@ -40,16 +40,18 @@ def pad_test_image(image):
     n_cols = image.shape[1]
     n_chan = image.shape[2]
     
-    pad = np.zeros((glob.frame_size, n_cols, n_chan), dtype=np.float32)
+    pad = image[:glob.frame_size,:,:]
     image = np.concatenate((pad, image), axis=0)
+    pad = image[len(image)-glob.frame_size:,:,:]
     image = np.concatenate((image, pad), axis=0)
     
     n_rows = image.shape[0]
     n_cols = image.shape[1]
     n_chan = image.shape[2]
     
-    pad = np.zeros((n_rows, glob.frame_size, n_chan), dtype=np.float32)
+    pad = image[:, :glob.frame_size,:]
     image = np.concatenate((pad, image), axis=1)
+    pad = image[:, len(image[0])-glob.frame_size:,:]
     image = np.concatenate((image, pad), axis=1)
     
     n_rows = image.shape[0]
@@ -57,8 +59,6 @@ def pad_test_image(image):
     n_chan = image.shape[2]
     
     step= glob.block_size - (glob.frame_size * 2)
-    print ("step " + str(step))
-    print("shape dopo pad cornice " + str(image.shape[0]) + " " + str(image.shape[1]))
     
     v_blks = math.ceil(n_rows/step)
     image = compute_last_v_block_padding(image, n_rows, n_cols, n_chan, step, padding_info, v_blks)
@@ -70,9 +70,7 @@ def pad_test_image(image):
     
     padding_info.number_of_horizontal_blocks = h_blks
     padding_info.number_of_vertical_blocks = v_blks
-    print(str(image.shape[0]) + " " + str(image.shape[1]))
-    print(str(padding_info.number_of_horizontal_blocks))
-    print(str(padding_info.number_of_vertical_blocks))
+    
     return image, padding_info
 
 
@@ -81,8 +79,8 @@ def compute_last_v_block_padding(image, n_rows, n_cols, n_chan, step, padding_in
     height_last_v_block = n_rows - last_blk_start_idx
     if height_last_v_block < glob.block_size:
         diff = glob.block_size - height_last_v_block
-        padding_info.size_pad_bottom= padding_info.size_pad_bottom + diff
-        pad = np.zeros((diff, n_cols, n_chan), dtype=np.float32)
+        padding_info.size_pad_bottom = padding_info.size_pad_bottom + diff
+        pad = image[len(image) - diff:,:,:]
         image = np.concatenate((image, pad), axis=0)
     return image
 
@@ -93,7 +91,7 @@ def compute_last_h_block_padding(image, n_rows, n_cols, n_chan, step, padding_in
     if width_last_h_block < glob.block_size:    
         diff = glob.block_size - width_last_h_block
         padding_info.size_pad_right = padding_info.size_pad_right + diff
-        pad = np.zeros((n_rows, diff, n_chan), dtype=np.float32)
+        pad= image[:, len(image[0]) - diff:,:]
         image = np.concatenate((image, pad), axis=1)
     return image
 
@@ -110,9 +108,6 @@ def unpad_image(decompressed_image, padding_info):
 
 
 def get_train_blocks(image):
-    
-    image = pad_image(image)
-    
     blocks = []
     n_rows = image.shape[0]
     n_cols = image.shape[1]
@@ -178,16 +173,3 @@ def get_train_set(dataset_path, n_images):
     return train_blocks
 
 
-def get_psnr(original, compressed):
-    h = original.shape[0]
-    w = original.shape[1]
-
-    mse = 0
-    for r in range(h):
-        for c in range(w):
-            for v in range(3):
-                mse += (original[r, c, v]-compressed[r, c, v])**2
-
-    mse = mse/float(h*w)
-    arg = 1/mse**(1/2)
-    return 20*math.log10(arg)

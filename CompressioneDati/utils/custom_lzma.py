@@ -22,6 +22,5 @@ def decompression(byte_array_lz, original_shape):
                                 )
         
     float_array = np.frombuffer(byte_array, dtype=np.float32)
-    original_array= np.reshape(float_array, original_shape)
     
-    return original_array
+    return float_array

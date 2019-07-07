@@ -6,8 +6,7 @@ from . import image_utils
 from . import glob
 
 
-                                  
-                                  
+                                 
 # Compress image blocks through a compression network                                  
 def compress_image(compression_net, image_blocks):
     compressed_blocks = []
@@ -22,9 +21,9 @@ def compress_image(compression_net, image_blocks):
 Decompress image blocks through a decompression network. 
 Blocks are then reshaped to form the decompressed image. Lastly, image padding is deleted.
 '''  
-def decompress_image(decompression_net, compressed_blocks,
-                     padding_info, width_immagine_originale,
-                     height_immagine_originale, p=True):
+def image_decompression_with_autoencoder(decompression_net, compressed_blocks,
+                                         padding_info, width_immagine_originale,
+                                         height_immagine_originale, p=True):
     
     width_decompressed_image = (padding_info.size_pad_left +
                                 width_immagine_originale +
@@ -37,20 +36,18 @@ def decompress_image(decompression_net, compressed_blocks,
                                  glob.frame_size * 2)
     
     #Initialize empty decompressed_image    
-    decompressed_image = np.zeros((height_decompressed_image,width_decompressed_image,3), dtype=np.float32)
+    net_decompressed_image = np.zeros((height_decompressed_image,width_decompressed_image,3), dtype=np.float32)
     
-    decompressed_image = decompress_image_through_network(decompression_net, padding_info, 
-                                                          compressed_blocks, decompressed_image)
+    net_decompressed_image = predict_original_blocks(decompression_net, padding_info, 
+                                                        compressed_blocks, net_decompressed_image)
             
-    #Decompressed image is unpadded
-    decompressed_image = image_utils.unpad_image(decompressed_image, padding_info)
     
-    return decompressed_image
+    return net_decompressed_image
 
 
-def decompress_image_through_network(decompression_net, padding_info, compressed_blocks, decompressed_image):
+def predict_original_blocks(decompression_net, padding_info, compressed_blocks, decompressed_image):
     step = glob.block_size - (glob.frame_size * 2)
-                                  
+    #Predict original blocks and position them properly                             
     for row in range (0, padding_info.number_of_vertical_blocks):
         for col in range (0, padding_info.number_of_horizontal_blocks):
             
@@ -71,7 +68,7 @@ def decompress_image_through_network(decompression_net, padding_info, compressed
 
 
 #Compute relevant errors
-def compute_relevant_errors(immagine, decompressed_image, threshold, p=True):
+def compute_relevant_errors(immagine, autoencoder_decompressed_img, threshold, p=True):
     
     height = len(immagine)
     width = len(immagine[0])
@@ -81,7 +78,7 @@ def compute_relevant_errors(immagine, decompressed_image, threshold, p=True):
     error_matrix = np.zeros((height, width, 5), dtype=np.float32)
     
     #Error computed
-    error_matrix[:,:,0:3] = decompressed_image - immagine
+    error_matrix[:,:,0:3] = autoencoder_decompressed_img - immagine
 
     #Decore matrix with row and col information
                                   
@@ -135,113 +132,6 @@ def correct_errors(decompressed_image, important_errors):
         decompressed_image[row_index, col_index, :] -= important_errors[i,0:3]
     
     return decompressed_image
-
-
-        
-    
-
-  
-    
-def single_image_pred_error(net, image_path):
-    image, alpha_channel=image_utils.load_image(image_path)
-    image_width=len(image[0])
-    image_height=len(image)
-    
-    img_padded = image_utils.pad_test_image(image,128)[0]
-    
-    
-    
-
-    #Organizzo i blocchi come impostato in get_test_blocks
-    number_of_horizontal_blocks= int(img_padded.shape[1]/64) - 1
-    number_of_vertical_blocks= int(img_padded.shape[0]/64) - 1 
-    
-
-    
-    nz_img=img_padded
-    test_blocks=image_utils.get_test_blocks(nz_img)
-
-    predicted_image=np.zeros((img_padded.shape[0]-64,img_padded.shape[1]-64,3), dtype=np.float32)
-  
-
-    for row in range (0, number_of_vertical_blocks):
-        for col in range (0, number_of_horizontal_blocks):
-            start_row_index= row * 64 
-            start_col_index= col * 64
-            
-            #Organizzo gli output della predizione del singolo blocco salvando solo il quadrarto 64x64x3 centrale, come indicato nella funzione
-            #get_test_blocks
-            pred= get_prediction_new_block(row * number_of_horizontal_blocks + col, net, test_blocks)
-            #print("shape pred " + str(pred.shape))
-            pred=pred[0]
-            #print("shape pred " + str(pred.shape))
-            pred=pred[32:96,32:96,:]
-            predicted_image[start_row_index:start_row_index+64, start_col_index:start_col_index+64, :]=pred
-            
-    print("predicted_image shape " + str(predicted_image.shape))     
-    '''Elimino il padding
-    1) Cancello i 4 padding da 64 righe/colonne di pixel messi sopra/sotto/sinistra/destra dell'intera immagine nel metodo pad_image. 
-    Da ognuno dei 4 lati ho già escluso (vedi il commento precedente) le 32 righe/colonne più esterni. 
-    '''
-    
-    predicted_image= predicted_image[32:len(predicted_image)-32,32:len(predicted_image[0])-32,:]
-      
-    '''
-    2) Cancello ora il padding concatenatoc da Giovanni a destra ed in fondo all'immagine 
-    '''
-    
-   
-    predicted_image =predicted_image[0:image_height,0:image_width, :]
-   
-    
-    print(type(predicted_image[0][0][0]))
-    
-    img.imsave("predicted/error_image.png", predicted_image)
-    error_image = predicted_image - image
-    error_image=error_image.reshape(-1)
-    
-   
-    #Valore atteso. l'ho calcolato una volta sui valori reali dell'errore (sia positivi che negativi), ed un'altra volta sul valori assoluti
-    #dell'errore.
-    mu=np.mean(error_image)
-    
-    #Deviazione standard. l'ho calcolata una volta sui valori reali dell'errore (sia positivi che negativi), ed un'altra volta sul valori assoluti
-    #dell'errore.
-    std= np.std(error_image)
-    
-    print(error_image)
-    print("Expected Value dell'errore sulla singola immagine " + image_path + " " + str(mu))
-    print("Standard deviation dell'errore sulla singola immagine " + image_path + " " + str(std))
-
-    print()
-    error_image_absolute=np.absolute(error_image)
-    mu_absolute=np.mean(error_image_absolute)
-    std_absolute= np.std(error_image_absolute)
-    
-    print(error_image_absolute)
-    print("Expected Value dell'errore sulla singola immagine " + image_path + " " + str(mu_absolute))
-    print("Standard deviation dell'errore sulla singola immagine " + image_path + " " + str(std_absolute))
-
-    return error_image, error_image_absolute 
-    
-
-    
-def validation_set_pred_error(net):
-    error_vector = single_image_pred_error(conv2,"dataset2_preloaded/valid/0.png")[0]
-    for i in range (1,100):
-        i_error_vector=single_image_pred_error(conv2,"dataset2_preloaded/valid/" + str(i) +".png")
-        error_vector = np.concatenate((error_vector, i_error_vector), axis=0)
-        
-    error_vector_absolute=np.absolute(error_vector)
-    #Valore atteso
-    mu=np.mean(error_vector)
-    #Deviazione standard
-    std= np.std(error_vector)
-    print("Expected Value complessivo dell'errore " + str(mu))
-    print("Standard deviation complessiva dell'errore " + str(std))
-    print(error_vector.shape)
-    return error_vector
-
 
 
 def get_treshold(im1, im2, quality, n_samples=10000):

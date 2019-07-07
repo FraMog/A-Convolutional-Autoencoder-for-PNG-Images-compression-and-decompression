@@ -1,5 +1,8 @@
 import tensorflow as tf
 import numpy as np
+import random
+from . import image_utils
+
 
 def get_autoencoder():
 
@@ -53,40 +56,33 @@ def get_decoder():
     #autoencoder.summary()
     return autoencoder
 
-
-def fit_network(net, block_size, n_epochs=40):
-    train_set_size=800 
+#Training
+def fit_network(net, n_epochs=40):
+    train_set_size = 800
+    casual_array = np.arange(train_set_size).tolist()
      
     for i in range (0, n_epochs):
-        casual_array=np.arange(train_set_size).tolist()
-        train_set=[]
+        train_set = []
+        #40 images patch
         for j in range (0,40):
-            index=randint(0, len(casual_array)-1)
-            path_immagine= "dataset2_preloaded/train/" + str(casual_array[index]) + ".png" 
-            blocks = image_utils.get_blocks(image_utils.load_image(path_immagine), block_size)
-        
+            index = random.randint(0, len(casual_array)-1)
+            path_immagine = "dataset2_preloaded/train/" + str(casual_array[index]) + ".png" 
+            image_rgb = image_utils.load_image(path_immagine)[0]
+            pad_img = image_utils.pad_train_image(image_rgb)
+            blocks = image_utils.get_train_blocks(pad_img)        
             train_set.extend(blocks)
-
             del(blocks)
-            print(index)
             casual_array.pop(index)
             
         train_set = np.asarray(train_set).astype(float)
-      
-                                              
-        nz_train_set = train_set
+        net.fit(x=train_set, y=train_set, batch_size=128, epochs=1, verbose=1, shuffle=True, initial_epoch=0)
         del(train_set)
-        net.fit(x=nz_train_set, y=nz_train_set, batch_size=128, epochs=1, verbose=1, shuffle=True, initial_epoch=0)
-        del(nz_train_set)
-        print("Mancano " + str(len(casual_array)) + " immagini")
-        
+        print("Epoca " + str(i+1) + " su " + str(n_epochs) + 
+              ". Mancano " + str(len(casual_array)) + " immagini")
+        print() 
     return net
 
-    
-#Predizione su un blocco di un'immagine nuova
-def get_block_prediction(index, net, blocks):
-    pred=net.predict(np.asarray([blocks[index]]))
-    return pred
+
 
 def get_trained_encoder_decoder(trained_autoencoder, n_layers=6):
     encoder = get_encoder()
@@ -97,3 +93,5 @@ def get_trained_encoder_decoder(trained_autoencoder, n_layers=6):
     
     return encoder, decoder
     
+    
+   

@@ -6,7 +6,7 @@ from . import image_utils
 from . import glob
 from . import compression_utils
 
-def compress(image_path, encoder, decoder, quality, p=True):
+def compress(image_path, compression_net, decompression_net, quality, p=True):
     quality=100-quality
     t0= time.clock()
     t1= time.clock()
@@ -45,7 +45,7 @@ def compress(image_path, encoder, decoder, quality, p=True):
 
         
     # Lossy image blocks compression through encoder network
-    compressed_blocks=compression_utils.compress_image(encoder, image_blocks)
+    compressed_blocks=compression_utils.compress_image(compression_net, image_blocks)
     compressed_blocks_shape = np.asarray(compressed_blocks).shape
     if p:
         print("Image blocks compressed through network. Elapsed: {}".format(time.clock()-t0))
@@ -64,22 +64,29 @@ def compress(image_path, encoder, decoder, quality, p=True):
 
     # Error computation phase
     #Compressed blocks are decompressed and reshaped. The outuput is the decompressed_image
-    net_decompressed_image= compression_utils.decompress_image(decoder, compressed_blocks,
-                                         padding_info, width_immagine_originale,
-                                         height_immagine_originale, p)
+    net_decompressed_image= compression_utils.image_decompression_with_autoencoder(decompression_net, compressed_blocks,
+                                                                                   padding_info, width_immagine_originale,
+                                                                                 height_immagine_originale, p)
+    
+    net_decompressed_image = image_utils.unpad_image(net_decompressed_image, padding_info)
     if p:
         print("Image decompressed. Elapsed: {}".format(time.clock()-t0))
-        t0= time.clock()   
+        t0= time.clock() 
+      
+    
     # Treshold evaluation
     treshold = compression_utils.get_treshold(immagine_rgb, net_decompressed_image, quality)
     if p:
-        print("Proper threshold computed. Elapsed: {}".format(time.clock()-t0))
+        print("Proper treshold computed. Elapsed: {}".format(time.clock()-t0))
+        print("Treshold is " + str(treshold))
         t0= time.clock()   
     important_errors =  compression_utils.compute_relevant_errors(immagine_rgb, net_decompressed_image, treshold, p)  
     imp_errors_shape=important_errors.shape
     if p:
         print("Relevant errors computed. Elapsed: {}".format(time.clock()-t0))
         t0= time.clock()   
+        
+        
     # important_errors compressed through LZMA
     important_errors_bytes= important_errors.tobytes()
     important_errors_lz = custom_lzma.compression(important_errors) 
