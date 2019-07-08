@@ -13,7 +13,7 @@ def compression(array):
     return byte_array_lz   
 
 
-def decompression(byte_array_lz, original_shape):
+def decompression(byte_array_lz):
     
     byte_array= lzma.decompress(
                                 byte_array_lz,

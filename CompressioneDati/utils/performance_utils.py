@@ -82,17 +82,11 @@ def number_of_bytes(data_structure):
 
 
 # Decompress blocks through a decoder, and evaluate decoder decompression error.
-def autoencoder_error_evaluation(rgb_image, code, decompression_net, p=True):
-    
-    (compressed_blocks_lz, compressed_blocks_shape, 
-    important_errors_lz, imp_errors_shape,
-    padding_info, width_immagine_originale,
-    height_immagine_originale, alpha_channel_lz) = code
-    
-    
-    compressed_blocks = custom_lzma.decompression(compressed_blocks_lz, compressed_blocks_shape)
-    compressed_blocks = compressed_blocks.reshape(compressed_blocks_shape)
-        
+def autoencoder_error_evaluation(rgb_image, compressed_blocks,
+                                 decompression_net, width_immagine_originale, 
+                                 height_immagine_originale, padding_info,
+                                 p=True):
+           
     net_decompressed_image = compression_utils.image_decompression_with_autoencoder(decompression_net, compressed_blocks,
                                                                                     padding_info, width_immagine_originale,
                                                                                     height_immagine_originale, p)
@@ -110,6 +104,35 @@ def autoencoder_error_evaluation(rgb_image, code, decompression_net, p=True):
     
 
     return error_image, error_image_absolute, mean, std, mean_absolute, std_absolute
+   
+    
+    
+def validation_set_autoencoder_error_evaluation(compression_net, decompression_net, p=True):
+    validation_set_errors = []
+    for i in range (100):
+        image_path = "dataset/valid/" + str(i) + ".png"
+        rgb_image, alpha_channel=image_utils.load_image(image_path)
+
+        width_immagine_originale=len(rgb_image[0])
+        height_immagine_originale=len(rgb_image)
+
+        img_padded, padding_info = image_utils.pad_test_image(rgb_image)
+        image_blocks = image_utils.get_test_blocks(img_padded, padding_info)
+
+
+        # Lossy image blocks compression through encoder network
+        compressed_blocks=compression_utils.compress_image(compression_net, image_blocks)
+        compressed_blocks_shape = np.asarray(compressed_blocks).shape
+        
+        error_informations = autoencoder_error_evaluation(rgb_image, compressed_blocks,
+                                                         decompression_net, width_immagine_originale, 
+                                                         height_immagine_originale, padding_info,
+                                                         p=False)
+        error_informations = error_informations [2:6]
+        validation_set_errors.append(error_informations)
+        
+    return validation_set_errors
+        
     
     
 def get_psnr(original, decompressed):

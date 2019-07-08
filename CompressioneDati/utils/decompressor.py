@@ -20,7 +20,8 @@ def decompress(code, decompression_net, p=True):
     #Alpha channel decompression with LZMA
     if alpha_channel_lz is not None:
         alpha_channel_shape = (height_immagine_originale, width_immagine_originale, 1)
-        alpha_channel = custom_lzma.decompression(alpha_channel_lz, alpha_channel_shape)
+        alpha_channel = custom_lzma.decompression(alpha_channel_lz)
+        alpha_channel = alpha_channel.reshape(alpha_channel_shape)
         
         if p:
             print("Alpha channel LZMA decompressed. Elapsed: {}".format(time.clock()-t0))
@@ -29,7 +30,7 @@ def decompress(code, decompression_net, p=True):
         alpha_channel=None
                             
     # Blocks decompression through LZMA
-    compressed_blocks = custom_lzma.decompression(compressed_blocks_lz, compressed_blocks_shape)
+    compressed_blocks = custom_lzma.decompression(compressed_blocks_lz)
     compressed_blocks = compressed_blocks.reshape(compressed_blocks_shape)
     if p:
         print("Blocks LZMA decompressed. Elapsed: {}".format(time.clock()-t0))
@@ -58,7 +59,7 @@ def decompress(code, decompression_net, p=True):
                                   
     #Error correction phase    
     important_errors_lz = err_received
-    important_errors = custom_lzma.decompression(important_errors_lz, imp_errors_shape)
+    important_errors = custom_lzma.decompression(important_errors_lz)
     important_errors = important_errors.reshape(imp_errors_shape)
     if p:
         print("Relevant errors decompressed through LZMA. Elapsed: {}".format(time.clock()-t0))

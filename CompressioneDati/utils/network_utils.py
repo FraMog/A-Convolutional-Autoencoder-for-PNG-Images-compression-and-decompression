@@ -66,7 +66,7 @@ def fit_network(net, n_epochs=40):
         #40 images patch
         for j in range (0,40):
             index = random.randint(0, len(casual_array)-1)
-            path_immagine = "dataset2_preloaded/train/" + str(casual_array[index]) + ".png" 
+            path_immagine = "dataset/train/" + str(casual_array[index]) + ".png" 
             image_rgb = image_utils.load_image(path_immagine)[0]
             pad_img = image_utils.pad_train_image(image_rgb)
             blocks = image_utils.get_train_blocks(pad_img)        
