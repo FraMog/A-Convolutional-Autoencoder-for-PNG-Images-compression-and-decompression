@@ -148,5 +148,6 @@ def get_treshold(im1, im2, quality, n_samples=10000):
         errors.extend(diff.tolist())
     errors = [abs(x) for x in errors]
     errors.sort()
+
     treshold = np.percentile(errors, quality)
     return treshold 

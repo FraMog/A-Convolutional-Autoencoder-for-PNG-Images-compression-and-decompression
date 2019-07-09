@@ -109,7 +109,7 @@ def autoencoder_error_evaluation(rgb_image, compressed_blocks,
     
 def validation_set_autoencoder_error_evaluation(compression_net, decompression_net, p=True):
     validation_set_errors = []
-    for i in range (100):
+    for i in range (20):
         image_path = "dataset/valid/" + str(i) + ".png"
         rgb_image, alpha_channel=image_utils.load_image(image_path)
 

@@ -26,7 +26,7 @@ def get_autoencoder():
     return autoencoder
 
 
-def get_encoder():
+def get_encoder_network():
     autoencoder = tf.keras.Sequential()
     autoencoder.add(tf.keras.layers.Conv2D(8, (3, 3), input_shape=(128, 128, 3), padding="same", activation="relu"))
     autoencoder.add(tf.keras.layers.MaxPooling2D(pool_size=(2, 2)))
@@ -40,7 +40,7 @@ def get_encoder():
     return autoencoder
 
 
-def get_decoder():
+def get_decoder_network():
     autoencoder = tf.keras.Sequential()
     autoencoder.add(tf.keras.layers.Conv2D(16, (3, 3), input_shape=(32, 32, 16), activation='relu', padding='same'))
     autoencoder.add(tf.keras.layers.UpSampling2D((2,2)))
@@ -84,14 +84,14 @@ def fit_network(net, n_epochs=40):
 
 
 
-def get_trained_encoder_decoder(trained_autoencoder, n_layers=6):
-    encoder = get_encoder()
-    decoder = get_decoder()
+def get_trained_encoder_decoder_nets(trained_autoencoder, n_layers=6):
+    encoder_network = get_encoder_network()
+    decoder_network = get_decoder_network()
     
-    encoder.set_weights(trained_autoencoder.get_weights()[0:n_layers] )
-    decoder.set_weights(trained_autoencoder.get_weights()[n_layers:] )
+    encoder_network.set_weights(trained_autoencoder.get_weights()[0:n_layers] )
+    decoder_network.set_weights(trained_autoencoder.get_weights()[n_layers:] )
     
-    return encoder, decoder
+    return encoder_network, decoder_network
     
     
    
